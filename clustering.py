@@ -40,13 +40,13 @@ def average_month(years):
     return rdd
 
 def parseDataset(lines):
-    rdd = lines.map(lambda line: line.split(',')[1]) \
-                .map(lambda line: [float(line)])
+    rdd = lines.map(lambda line: [float(line)])
     return rdd
 
 def generate_initial_centroids(months, k):
     if k == 12:
-        return months
+        centroids = map(lambda item: [item], months)
+        return centroids
     else:
         if k == 4:
             months = [months[11]] + months[:11]
@@ -71,18 +71,18 @@ if __name__ == "__main__":
     currTime = currTime.replace(':', '-')
 
     sc = SparkContext(appName="KMeans")
-    lines = sc.textFile("hdfs://localhost:9000/user/sebastian/dataset_observatory/initial_centroids.csv")
-    dataset = sc.textFile("hdfs://localhost:9000/user/sebastian/dataset_observatory/training_data2.csv")
+    lines = sc.textFile("hdfs://masterNode:9000/user/spark/dataset_observatory/initial_centroids.csv")
+    dataset = sc.textFile("hdfs://masterNode:9000/user/spark/dataset_observatory/training_data.csv")
 
     average_per_year = average_year(lines) # 2014 and 2015
     average_per_month = average_month(average_per_year)
     data = parseDataset(dataset)
     k = int(sys.argv[1])
     initial_centroids = generate_initial_centroids(average_per_month.collect(), k)
-
+    print(initial_centroids)
     # KMeans
     start = time()
-    kmeans_model = KMeans.train(data, k, maxIterations = 100, initialModel = KMeansModel(initial_centroids))
+    kmeans_model = KMeans.train(data, k, maxIterations = 100) #, initialModel = KMeansModel(initial_centroids))
     end = time()
     elapsed_time = end - start
     kmeans_output = [
@@ -95,20 +95,20 @@ if __name__ == "__main__":
 
     # Bisecting KMeans
     start = time()
-    bisecting_model = BisectingKMeans.train(data, k, maxIterations = 20,
-                            minDivisibleClusterSize = 1.0, seed = -1888008604)
-    end = time()
-    elapsed_time = end - start
-    bisecting_output = [
-        "====================== Bisecting KMeans ====================\n",
-        "Final centers: " + str(bisecting_model.clusterCenters),
-        "Total Cost: " + str(bisecting_model.computeCost(data)),
-        "Value of K: " + str(k),
-        "Elapsed time: %0.10f seconds." % elapsed_time
-    ]
+   # bisecting_model = BisectingKMeans.train(data, k, maxIterations = 20,
+    #                        minDivisibleClusterSize = 1.0, seed = -1888008604)
+    #end = time()
+    #elapsed_time = end - start
+    #bisecting_output = [
+    #    "====================== Bisecting KMeans ====================\n",
+    #    "Final centers: " + str(bisecting_model.clusterCenters),
+    #    "Total Cost: " + str(bisecting_model.computeCost(data)),
+    #    "Value of K: " + str(k),
+    #    "Elapsed time: %0.10f seconds." % elapsed_time
+    #]
 
     kmeans_info = sc.parallelize(kmeans_output)
-    bisecting_info = sc.parallelize(bisecting_output)
-    kmeans_info.saveAsTextFile("hdfs://localhost:9000/user/sebastian/output/kmeans_" + currTime)
-    bisecting_info.saveAsTextFile("hdfs://localhost:9000/user/sebastian/output/bisecting_kmeans_" + currTime)
+   # bisecting_info = sc.parallelize(bisecting_output)
+    kmeans_info.saveAsTextFile("hdfs://masterNode:9000/user/spark/output/kmeans_" + currTime)
+    #bisecting_info.saveAsTextFile("hdfs://masterNode:9000/user/spark/output/bisecting_kmeans_" + currTime)
     sc.stop()
