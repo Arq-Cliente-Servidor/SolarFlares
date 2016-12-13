@@ -1,1 +1,1 @@
-# SpaceWeather
+# SolarFlares
