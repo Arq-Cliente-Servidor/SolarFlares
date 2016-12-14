@@ -60,29 +60,38 @@ def generate_initial_centroids(months, k):
 
         return centroids
 
+def generate_probabilities(points, k, model, count_lines):
+    probabilities = np.zeros(k)
+    points = points.map(lambda point: (model.predict(point), 1.0)) \
+                    .reduceByKey(lambda p1, p2: p1 + p2) \
+                    .sortByKey() \
+                    .collect()
+
+    for p in points:
+	probabilities[p[0]] = float(p[1]) / count_lines
+    return probabilities
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: kmeans <k>(2, 4, 12)", file=sys.stderr)
         exit(-1)
 
-    currTime = strftime("%x") + '-' + strftime("%X")
-    currTime = currTime.replace('/', '-')
-    currTime = currTime.replace(':', '-')
-
+    currTime = strftime("%Y-%m-%d-%H-%M-%S")
     sc = SparkContext(appName="KMeans")
     lines = sc.textFile("hdfs://masterNode:9000/user/spark/dataset_observatory/initial_centroids.csv")
     dataset = sc.textFile("hdfs://masterNode:9000/user/spark/dataset_observatory/training_data.csv")
+    predict_data = sc.textFile("hdfs://masterNode:9000/user/spark/dataset_observatory/predict_data/Semestres/Semestre1-2016.csv")
 
     average_per_year = average_year(lines) # 2014 and 2015
     average_per_month = average_month(average_per_year)
     data = parseDataset(dataset)
     k = int(sys.argv[1])
     initial_centroids = generate_initial_centroids(average_per_month.collect(), k)
-    print(initial_centroids)
+
     # KMeans
     start = time()
-    kmeans_model = KMeans.train(data, k, maxIterations = 100) #, initialModel = KMeansModel(initial_centroids))
+    kmeans_model = KMeans.train(data, k, maxIterations = 100, initialModel = KMeansModel(initial_centroids))
     end = time()
     elapsed_time = end - start
     kmeans_output = [
@@ -93,8 +102,14 @@ if __name__ == "__main__":
         "Elapsed time: %0.10f seconds." % elapsed_time
     ]
 
-    # Bisecting KMeans
-    start = time()
+    # Predicting
+    points = parseDataset(predict_data)
+    count_lines = float(len(points.collect()))
+    probabilities = generate_probabilities(points, k, kmeans_model, count_lines)
+    print("Prob: ", probabilities)
+
+   # Bisecting KMeans
+   # start = time()
    # bisecting_model = BisectingKMeans.train(data, k, maxIterations = 20,
     #                        minDivisibleClusterSize = 1.0, seed = -1888008604)
     #end = time()
@@ -107,8 +122,8 @@ if __name__ == "__main__":
     #    "Elapsed time: %0.10f seconds." % elapsed_time
     #]
 
-    kmeans_info = sc.parallelize(kmeans_output)
+    #kmeans_info = sc.parallelize(kmeans_output)
    # bisecting_info = sc.parallelize(bisecting_output)
-    kmeans_info.saveAsTextFile("hdfs://masterNode:9000/user/spark/output/kmeans_" + currTime)
+   # kmeans_info.saveAsTextFile("hdfs://masterNode:9000/user/spark/output/kmeans_" + currTime)
     #bisecting_info.saveAsTextFile("hdfs://masterNode:9000/user/spark/output/bisecting_kmeans_" + currTime)
     sc.stop()
